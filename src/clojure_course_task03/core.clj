@@ -1,4 +1,5 @@
 (ns clojure-course-task03.core
+  (:use clojure.string)
   (:require [clojure.set]))
 
 (defn join* [table-name conds]
@@ -117,8 +118,11 @@
   ;; ------------------------------------
   ;; Предметная область -- разграничение прав доступа на таблицы в реелтерском агенстве
   ;;
-  ;; Работают три типа сотрудников: директор (имеет доступ ко всему), операторы ПК (принимают заказы, отвечают на тел. звонки,
-  ;; передают агенту инфу о клиентах), агенты (люди, которые лично встречаются с клиентами).
+  ;; Работают три типа сотрудников: 
+  ;; - директор (имеет доступ ко всему), 
+  ;; - операторы ПК (принимают заказы, отвечают на тел. звонки, передают 
+  ;; агенту инфу о клиентах), 
+  ;; - агенты (люди, которые лично встречаются с клиентами).
   ;;
   ;; Таблицы:
   ;; proposal -> [id, person, phone, address, region, comments, price]
@@ -216,7 +220,29 @@
   ;; 3) Создает следующие функции
   ;;    (select-agent-proposal) ;; select person, phone, address, price from proposal;
   ;;    (select-agent-agents)  ;; select clients_id, proposal_id, agent from agents;
-  )
+  (let [names (str (lower-case name) "s")]
+    (list 'do
+          (list 'def name 
+                (for [[e1 e2 e3] (partition 3 body)] {(keyword e1) (into [] (map keyword e3))}))
+          (cons 'do
+                (for [[e1 e2 e3] (partition 3 body)] 
+                  (list 'defn (symbol (str "select-" (lower-case name) "-" e1))
+                        []
+                        `(~(symbol "let") [~(symbol (str e1 "-fields-var")) [:all]]
+                          (~(symbol "select") ~e1
+                           (~(symbol "fields") :all)))))))))
+
+(comment
+  (macroexpand-1 '(group Agent
+                         proposal -> [person, phone, address, price]
+                         agents -> [clients_id, proposal_id, agent]))
+
+  (group Agent
+         proposal -> [person, phone, address, price]
+         agents -> [clients_id, proposal_id, agent])
+  (select-agent-proposal)
+)
+
 
 (defmacro user [name & body]
   ;; Пример
