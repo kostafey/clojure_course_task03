@@ -220,17 +220,17 @@
   ;; 3) Создает следующие функции
   ;;    (select-agent-proposal) ;; select person, phone, address, price from proposal;
   ;;    (select-agent-agents)  ;; select clients_id, proposal_id, agent from agents;
-  (let [names (str (lower-case name) "s")]
-    (list 'do
-          (list 'def name 
-                (for [[e1 e2 e3] (partition 3 body)] {(keyword e1) (into [] (map keyword e3))}))
-          (cons 'do
-                (for [[e1 e2 e3] (partition 3 body)] 
-                  (list 'defn (symbol (str "select-" (lower-case name) "-" e1))
-                        []
-                        `(~(symbol "let") [~(symbol (str e1 "-fields-var")) [:all]]
-                          (~(symbol "select") ~e1
-                           (~(symbol "fields") :all)))))))))
+  (list 'do
+        (list 'def name 
+              (into {} (for [[e1 e2 e3] (partition 3 body)] 
+                         {(keyword e1) (into [] (map keyword e3))})))
+        (cons 'do
+              (for [[e1 e2 e3] (partition 3 body)] 
+                (list 'defn (symbol (str "select-" (lower-case name) "-" e1))
+                      []
+                      `(~(symbol "let") [~(symbol (str e1 "-fields-var")) ~(into [] (map keyword e3))]
+                        (~(symbol "select") ~e1
+                         (~(symbol "fields") :all))))))))
 
 (comment
   (macroexpand-1 '(group Agent
@@ -240,9 +240,69 @@
   (group Agent
          proposal -> [person, phone, address, price]
          agents -> [clients_id, proposal_id, agent])
+  (group Director
+         proposal -> [:all]
+         clients -> [:all]
+         agents -> [:all])
   (select-agent-proposal)
+  (select-director-agents)
 )
 
+(defn push [vec value]
+  "Пример использования:
+  > (push (push [1 2] 3) 4)
+  [1 2 3 4]"
+  (let [vec (assoc vec (count vec) value)]
+    vec))
+
+(defn push-to-map [map key value]
+  "Примеры использования:
+  > (push-to-map {:a [1]} :a 2)
+  {:a [1 2]}
+
+  > (push-to-map {:a [1]} :a [2 3])
+  {:a [1 2 3]}"
+  (if (coll? map)
+    (if (coll? value)
+      (loop [m map
+             i 0]
+        (if (= i (count value))
+          m
+          (recur (push-to-map m key (nth value i)) (inc i))))
+      (assoc map key (push (key map) value)))))
+
+(defn push-to-map-correspond [target-map src-map]
+  "Пример использования:
+  > (push-to-map-correspond {:a [1] :b [2] :c []} {:a [1 2 3] :b [4 5]})
+  {:a [1 1 2 3] :b [2 4 5] :c []} "
+  (let [target-keys (keys target-map)]
+    (loop [result-map target-map
+           i 0]
+      (if (= i (count target-keys))
+        result-map
+        (let [key (nth target-keys i)]
+          (recur (if (contains? src-map key) 
+                   (push-to-map result-map key (key src-map))
+                   result-map) 
+                 (inc i)))))))
+
+(defn has? [vec value]
+  (> (.indexOf vec value) -1))
+
+(defn clear-access-map [amap]
+  "Пример использования:
+  > (clear-access-map {:a [1 1 2 3] :b [:all 2 4 5] :c []})
+  (clear-access-map {:a [1 2 3] :b [:all] :c []}) "
+  (let [akeys (keys amap)]
+    (loop [result-map amap
+           i 0]
+      (if (= i (count akeys))
+        result-map
+        (let [key (nth akeys i)]
+          (recur (if (has? (key amap) :all)
+                   (assoc result-map key [:all])
+                   (assoc result-map key (into [] (distinct (key amap)))))
+                 (inc i)))))))
 
 (defmacro user [name & body]
   ;; Пример
@@ -250,7 +310,41 @@
   ;;     (belongs-to Agent))
   ;; Создает переменные Ivanov-proposal-fields-var = [:person, :phone, :address, :price]
   ;; и Ivanov-agents-fields-var = [:clients_id, :proposal_id, :agent]
-  )
+  ;;
+  ;; (user Directorov
+  ;;       (belongs-to Operator,
+  ;;                   Agent,
+  ;;                   Director))
+  (let [groups (-> body first rest)
+        groups-contents (map eval groups)
+        table-names (-> (for [content groups-contents] (-> content keys)) flatten distinct)
+        access-map (into {} (flatten (for [table-name table-names] {table-name []})))
+        access-map (clear-access-map 
+                    (loop [i 0
+                           acc access-map]
+                      (if (= i (count groups-contents))
+                        acc
+                        (recur (inc i) (push-to-map-correspond acc (nth groups-contents i))))))]
+    (cons `do
+          (for [table-name table-names]
+            `(def ~(symbol (str name "-" (subs (str table-name) 1) "-fields-var"))
+               ~(table-name access-map))))))
+
+{:proposal [:all], :clients [:all]}
+
+(count '({:proposal [:all], :clients [:all]}
+ {:proposal [:person :phone :address :price], :agents [:clients_id :proposal_id :agent]} 
+ {:proposal [:all], :agents [:all], :clients [:all]}))
+
+(comment 
+  (macroexpand-1 '(user Ivanov
+                        (belongs-to Agent)))
+  (macroexpand-1 '(user Directorov
+                        (belongs-to Operator,
+                                    Agent,
+                                    Director)))
+)
+
 
 (defmacro with-user [name & body]
   ;; Пример
