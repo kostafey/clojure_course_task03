@@ -1,5 +1,5 @@
 (ns clojure-course-task03.core
-  (:use clojure.string)
+  (:use [clojure.string :only [lower-case]])
   (:require [clojure.set]))
 
 (defn join* [table-name conds]
@@ -330,12 +330,6 @@
             `(def ~(symbol (str name "-" (subs (str table-name) 1) "-fields-var"))
                ~(table-name access-map))))))
 
-{:proposal [:all], :clients [:all]}
-
-(count '({:proposal [:all], :clients [:all]}
- {:proposal [:person :phone :address :price], :agents [:clients_id :proposal_id :agent]} 
- {:proposal [:all], :agents [:all], :clients [:all]}))
-
 (comment 
   (macroexpand-1 '(user Ivanov
                         (belongs-to Agent)))
@@ -356,4 +350,32 @@
   ;;    proposal-fields-var и agents-fields-var.
   ;;    Таким образом, функция select, вызванная внутри with-user, получает
   ;;    доступ ко всем необходимым переменным вида <table-name>-fields-var.
-  )
+
+  (let [name (str name)
+        fields-var (filter #(has? (str %) name) 
+                           (keys (ns-publics *ns*)))]
+    (list `let
+          (into [] (apply concat
+                          (for [fv fields-var]
+                            [(symbol (subs (str fv) (inc (count name))))
+                             (eval fv)])))
+          (cons `do body))))
+ 
+(comment
+  (macroexpand-1 '(with-user Ivanov qwe))
+
+  (macroexpand-1 ' (with-user Ivanov
+                     (select proposal
+                             (fields :person, :phone, :address, :price)
+                             (join agents (= agents.proposal_id proposal.id)))))
+
+  (with-user Ivanov
+    (select proposal
+            (fields :person, :phone)
+            (where {:price 11})
+            (join agents (= agents.proposal_id proposal.id))
+            (order :f3)
+            (limit 5)
+            (offset 5)))
+ )
+
