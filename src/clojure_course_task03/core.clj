@@ -232,22 +232,6 @@
                         (~(symbol "select") ~e1
                          (~(symbol "fields") :all))))))))
 
-(comment
-  (macroexpand-1 '(group Agent
-                         proposal -> [person, phone, address, price]
-                         agents -> [clients_id, proposal_id, agent]))
-
-  (group Agent
-         proposal -> [person, phone, address, price]
-         agents -> [clients_id, proposal_id, agent])
-  (group Director
-         proposal -> [:all]
-         clients -> [:all]
-         agents -> [:all])
-  (select-agent-proposal)
-  (select-director-agents)
-)
-
 (defn push [vec value]
   "Пример использования:
   > (push (push [1 2] 3) 4)
@@ -330,16 +314,6 @@
             `(def ~(symbol (str name "-" (subs (str table-name) 1) "-fields-var"))
                ~(table-name access-map))))))
 
-(comment 
-  (macroexpand-1 '(user Ivanov
-                        (belongs-to Agent)))
-  (macroexpand-1 '(user Directorov
-                        (belongs-to Operator,
-                                    Agent,
-                                    Director)))
-)
-
-
 (defmacro with-user [name & body]
   ;; Пример
   ;; (with-user Ivanov
@@ -360,22 +334,4 @@
                             [(symbol (subs (str fv) (inc (count name))))
                              (eval fv)])))
           (cons `do body))))
- 
-(comment
-  (macroexpand-1 '(with-user Ivanov qwe))
-
-  (macroexpand-1 ' (with-user Ivanov
-                     (select proposal
-                             (fields :person, :phone, :address, :price)
-                             (join agents (= agents.proposal_id proposal.id)))))
-
-  (with-user Ivanov
-    (select proposal
-            (fields :person, :phone)
-            (where {:price 11})
-            (join agents (= agents.proposal_id proposal.id))
-            (order :f3)
-            (limit 5)
-            (offset 5)))
- )
 
